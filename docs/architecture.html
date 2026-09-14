@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Describe My Door architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg:#0c0b0a; --panel:#171513; --line:#3a352f; --text:#f8f4ea; --muted:#c4bdb0; --amber:#ffc53d; --green:#86efac; --blue:#9cc9ff; --red:#ff8a80; }
+  * { box-sizing: border-box; }
+  body { margin:0; width:1600px; height:1000px; background:var(--bg); color:var(--text); font-family:"Atkinson Hyperlegible",sans-serif; padding:40px 52px; position:relative; overflow:hidden; }
+  h1 { margin:0; font-size:38px; } .sub { color:var(--muted); font-size:19px; margin:6px 0 0; }
+  .mono { font-family:"JetBrains Mono",monospace; }
+  .box { position:absolute; background:var(--panel); border:2px solid var(--line); border-radius:16px; padding:14px 16px; }
+  .box h3 { margin:0 0 5px; font-size:20px; } .box p { margin:0; color:var(--muted); font-size:15px; line-height:1.38; }
+  .tag { display:block; font-size:11.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; margin-bottom:5px; }
+  .ring { border-color:#5b8def; } .ring .tag { color:var(--blue); }
+  .strands { border-color:var(--amber); } .strands .tag { color:var(--amber); }
+  .ours .tag { color:var(--green); }
+  .free { border-color:#8b6cc9; } .free .tag { color:#d8b4fe; }
+  .group { position:absolute; border:2px dashed var(--amber); border-radius:22px; }
+  .group > span { position:absolute; top:-13px; left:20px; background:var(--bg); padding:0 10px; color:var(--amber); font-weight:700; font-size:15px; letter-spacing:.1em; text-transform:uppercase; }
+  svg { position:absolute; left:0; top:0; }
+  .hook { font-size:14.5px !important; color:var(--text) !important; margin-top:4px !important; } .hook b { color:var(--red); }
+</style>
+</head>
+<body>
+  <h1>Describe My Door: architecture</h1>
+  <p class="sub">A Ring doorbell event becomes a short, private, spoken description for a blind or low-vision resident.</p>
+
+  <svg width="1600" height="1000">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#c4bdb0"/></marker></defs>
+    <g stroke="#c4bdb0" stroke-width="2.5" fill="none" marker-end="url(#a)">
+      <path d="M322 300 L 396 300" />
+      <path d="M322 500 L 396 380" />
+      <path d="M652 330 L 716 330" />
+      <path d="M1076 250 L 1136 225" />
+      <path d="M1076 320 L 1136 400" />
+      <path d="M1076 560 L 1136 585" />
+      <path d="M322 715 L 716 600" />
+      <path d="M896 672 L 896 752" />
+    </g>
+    <g fill="#c4bdb0" font-family="JetBrains Mono" font-size="12.5">
+      <text x="330" y="288">HMAC</text>
+      <text x="300" y="430">signed</text>
+      <text x="906" y="722">NDJSON / SSE</text>
+    </g>
+  </svg>
+
+  <div class="box ring" style="left:52px; top:225px; width:270px;">
+    <span class="tag">Ring device</span><h3>Ring doorbell</h3>
+    <p>Webhook v1.1: <span class="mono">button_press</span>, <span class="mono">motion_detected</span>, HMAC-SHA256 signed.</p>
+  </div>
+  <div class="box ours" style="left:52px; top:425px; width:270px;">
+    <span class="tag">Ours · no hardware needed</span><h3>Ring simulator</h3>
+    <p>Same v1.1 envelope, signed with HMAC, snapshot fixtures. Labeled "Simulated Ring events".</p>
+  </div>
+  <div class="box ours" style="left:52px; top:640px; width:270px;">
+    <span class="tag">Caregiver</span><h3>Expected visitors</h3>
+    <p>Label + time window + visible clues ("carrying flowers"). Never faces.</p>
+  </div>
+
+  <div class="box ours" style="left:398px; top:240px; width:254px;">
+    <span class="tag">Next.js route</span><h3>Webhook intake</h3>
+    <p>Verify HMAC over raw bytes → validate v1.1 (Zod) → idempotency on <span class="mono">request_id</span> → 200 in &lt; 5 s</p>
+  </div>
+
+  <div class="group" style="left:700px; top:150px; width:376px; height:520px;"><span>Strands Agents SDK</span></div>
+  <div class="box strands" style="left:720px; top:180px; width:336px;">
+    <span class="tag">Agent · Qwen3.8 (OpenAI-compatible API)</span><h3>Door agent</h3>
+    <p class="mono" style="font-size:14px; color:var(--text); line-height:1.6">fetch_snapshot()<br/>describe_scene()<br/>check_expected_visitors()<br/>announce()</p>
+  </div>
+  <div class="box strands" style="left:720px; top:420px; width:336px;">
+    <span class="tag">BeforeToolCallEvent hooks</span><h3>Deterministic guardrails</h3>
+    <p class="hook"><b>order</b> snapshot → vision → match → announce</p>
+    <p class="hook"><b>privacy</b> no gender, age, race, religion, health, names</p>
+    <p class="hook"><b>length</b> ≤ 28 words · <b>category</b> · <b>once</b></p>
+  </div>
+
+  <div class="box ring" style="left:1128px; top:160px; width:350px;">
+    <span class="tag">Ring Partner API</span><h3>Snapshot</h3>
+    <p class="mono" style="font-size:13px">POST /v1/devices/{id}/media/image/download → 303 → JPEG</p>
+  </div>
+  <div class="box free" style="left:1128px; top:330px; width:350px;">
+    <span class="tag">Vision · W&amp;B Inference (free)</span><h3>Gemma 4 31B</h3>
+    <p>JSON observations: clothing, carried objects, packages, vehicles. Privacy filter re-checks in code.</p>
+  </div>
+  <div class="box ring" style="left:1128px; top:520px; width:350px;">
+    <span class="tag">Ring Partner API</span><h3>Chime tone</h3>
+    <p class="mono" style="font-size:13px">POST /v1/devices/{id}/media/audio/playback {"audio_ref"}</p>
+  </div>
+
+  <div class="box ours" style="left:560px; top:755px; width:990px;">
+    <span class="tag">Companion web app · WCAG 2.2 AA</span><h3>What the resident gets</h3>
+    <p style="font-size:18px; color:var(--text); margin-top:4px">"This may be Lunch delivery from Nonna's Kitchen: a person in a green and black jacket holding a brown box."</p>
+    <p style="margin-top:6px">Speech synthesis · ARIA live region · vibration · Atkinson Hyperlegible type · today's history · agent and hook trace for caregivers</p>
+  </div>
+
+  <p class="mono" style="position:absolute; left:52px; bottom:30px; color:var(--muted); font-size:13px; margin:0">Deployed on Vercel · RING_MODE=simulator|live · no paid services</p>
+</body>
+</html>

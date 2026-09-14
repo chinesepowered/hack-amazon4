@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Describe My Door · pitch</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg:#0c0b0a; --panel:#171513; --panel2:#201d1a; --line:#34302b; --text:#f8f4ea; --muted:#c4bdb0; --amber:#ffc53d; --ink:#1a1300; --green:#86efac; --blue:#9cc9ff; --red:#ff8a80; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:"Atkinson Hyperlegible",system-ui,sans-serif; overflow:hidden; }
+  .deck { position:absolute; left:50%; top:50%; width:1600px; height:900px; transform-origin:center; }
+  .slide { position:absolute; inset:0; padding:84px 96px; display:none; }
+  .slide.on { display:block; animation:in .45s ease-out both; }
+  @keyframes in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+  .kicker { font-size:18px; letter-spacing:.16em; text-transform:uppercase; color:var(--amber); font-weight:700; }
+  h1 { font-size:92px; line-height:1; margin:18px 0 0; letter-spacing:-.02em; }
+  h2 { font-size:58px; line-height:1.08; margin:16px 0 0; letter-spacing:-.01em; }
+  p.lead { font-size:32px; line-height:1.35; color:var(--muted); margin:26px 0 0; max-width:820px; }
+  .mono { font-family:"JetBrains Mono",monospace; }
+  .card { background:var(--panel); border:2px solid var(--line); border-radius:22px; padding:26px 30px; }
+  .foot { position:absolute; left:96px; right:96px; bottom:44px; display:flex; justify-content:space-between; color:var(--muted); font-size:17px; }
+  .chip { display:inline-block; border:2px solid currentColor; border-radius:999px; padding:5px 16px; font-weight:700; font-size:18px; }
+  .big { font-size:120px; font-weight:700; line-height:1; color:var(--amber); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  ul.clean { list-style:none; padding:0; margin:0; }
+  ul.clean li { font-size:26px; line-height:1.35; margin:0 0 16px; padding-left:36px; position:relative; }
+  ul.clean li::before { content:"●"; color:var(--amber); position:absolute; left:0; font-size:18px; top:6px; }
+  .flow { display:flex; align-items:stretch; gap:14px; margin-top:34px; }
+  .step { flex:1; background:var(--panel); border:2px solid var(--line); border-radius:18px; padding:18px 18px; }
+  .step b { display:block; font-size:22px; margin-bottom:6px; } .step span { color:var(--muted); font-size:17px; line-height:1.35; display:block; }
+  .step.ring { border-color:#5b8def; } .step.strands { border-color:var(--amber); }
+  .arrow { align-self:center; color:var(--muted); font-size:30px; }
+  .tag { font-size:13px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; display:block; margin-bottom:6px; }
+  .src { font-size:15px; color:var(--muted); margin-top:14px; }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1 -->
+  <section class="slide" data-s="1">
+    <div class="kicker">Ring track · Build, Ship, Shape</div>
+    <h1>Describe My Door</h1>
+    <p class="lead">When the doorbell rings, a blind resident can't see who is there. Now they can <b style="color:var(--text)">hear</b> it, in plain words, in seconds.</p>
+    <div class="card" style="position:absolute; right:96px; top:360px; width:620px; border-color:var(--amber);">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <span class="mono" style="color:var(--muted); font-size:16px; letter-spacing:.12em">AT YOUR DOOR · 12:18</span>
+        <span class="chip" style="color:var(--green); font-size:15px">Expected visitor</span>
+      </div>
+      <p style="font-size:34px; line-height:1.2; font-weight:700; margin:16px 0 0">"This may be your lunch delivery: a person in a green and black jacket holding a brown box."</p>
+    </div>
+    <div style="position:absolute; left:96px; top:560px; display:flex; gap:14px; flex-wrap:wrap; max-width:640px">
+      <span class="chip" style="color:var(--blue)">Ring Partner API</span>
+      <span class="chip" style="color:var(--amber)">Strands Agents SDK</span>
+      <span class="chip" style="color:var(--green)">Private by design</span>
+    </div>
+    <div class="foot"><span>A Ring Appstore web app for blind and low-vision residents and the people who care for them</span><span>1 / 4</span></div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide" data-s="2">
+    <div class="kicker">The problem</div>
+    <h2>A doorbell camera is a screen.<br/>For millions of people, screens don't answer "who's there?"</h2>
+    <div class="grid2" style="margin-top:44px">
+      <div class="card">
+        <div class="big">7 million</div>
+        <p style="font-size:26px; margin:14px 0 0; line-height:1.35">people in the United States have vision impairment, including <b>1 million</b> with blindness.</p>
+        <p class="src">CDC, Vision and Eye Health: Fast Facts</p>
+      </div>
+      <div class="card">
+        <span class="tag" style="color:var(--amber)">Who it's for</span>
+        <ul class="clean">
+          <li>Blind and low-vision people living independently</li>
+          <li>Older adults whose sight is fading</li>
+          <li>Family caregivers who can't be there at every knock</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot"><span>Today: open the door to a stranger, or ask someone to look at the camera for you</span><span>2 / 4</span></div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide" data-s="3">
+    <div class="kicker">How it works</div>
+    <h2>A Ring event becomes a short, private, spoken description.</h2>
+    <div class="flow">
+      <div class="step ring"><span class="tag" style="color:var(--blue)">Ring</span><b>Webhook</b><span>button_press or motion_detected, HMAC-SHA256 verified</span></div>
+      <div class="arrow">→</div>
+      <div class="step ring"><span class="tag" style="color:var(--blue)">Ring</span><b>Snapshot</b><span>image download at the event timestamp</span></div>
+      <div class="arrow">→</div>
+      <div class="step strands"><span class="tag" style="color:var(--amber)">Strands agent</span><b>Describe + match</b><span>vision observations, caregiver's expected visitors</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="tag" style="color:var(--green)">Resident</span><b>Speak + chime</b><span>screen reader, speech, vibration, Chime tone</span></div>
+    </div>
+    <div class="grid2" style="margin-top:34px">
+      <div class="card">
+        <span class="tag" style="color:var(--amber)">Guardrails are code, not prompts</span>
+        <p style="font-size:23px; line-height:1.45; margin:6px 0 0">Strands <span class="mono" style="font-size:19px">BeforeToolCallEvent</span> hooks block any announcement that guesses gender, age, race, religion, health or a name, runs over 28 words, or claims an expected visitor the evidence doesn't support.</p>
+      </div>
+      <div class="card">
+        <span class="tag" style="color:var(--blue)">Amazon tech</span>
+        <p style="font-size:21px; line-height:1.5; margin:6px 0 0" class="mono">Ring Partner API: webhooks v1.1 · /media/image/download · /media/audio/playback<br/>AWS: Strands Agents SDK (TypeScript)</p>
+      </div>
+    </div>
+    <div class="foot"><span>Matching uses time windows and visible clues like "carrying flowers". Never faces.</span><span>3 / 4</span></div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide" data-s="4">
+    <div class="kicker">Why it matters</div>
+    <h2>Knowing who's at the door is independence.</h2>
+    <div class="grid2" style="margin-top:40px">
+      <div class="card">
+        <ul class="clean">
+          <li>Answer the door with confidence, or don't</li>
+          <li>Packages get noticed before they're lost</li>
+          <li>Caregivers set expectations once, and step back</li>
+          <li>Nothing about a visitor's identity is ever guessed or stored</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="tag" style="color:var(--green)">Built to ship</span>
+        <p style="font-size:24px; line-height:1.45; margin:6px 0 16px">A Ring Appstore web app with an accessible companion view (WCAG 2.2 AA), sold as a subscription.</p>
+        <span class="tag" style="color:var(--amber)">Next</span>
+        <p style="font-size:22px; line-height:1.45; margin:6px 0 0; color:var(--muted)">Live Ring account and devices · spoken descriptions on the Chime itself when dynamic audio is available · more languages</p>
+      </div>
+    </div>
+    <div class="foot"><span>Describe My Door · new work for the hackathon · demo data is simulated and fictional</span><span>4 / 4</span></div>
+  </section>
+
+</div>
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let i = Math.min(Math.max(parseInt(new URLSearchParams(location.search).get('s') || '1', 10) - 1, 0), slides.length - 1);
+  const show = () => slides.forEach((s, k) => s.classList.toggle('on', k === i));
+  const fit = () => { const s = Math.min(innerWidth / 1600, innerHeight / 900); document.getElementById('deck').style.transform = `translate(-50%,-50%) scale(${s})`; };
+  addEventListener('resize', fit);
+  addEventListener('keydown', (e) => {
+    if (['ArrowRight', ' ', 'PageDown'].includes(e.key)) i = Math.min(i + 1, slides.length - 1);
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) i = Math.max(i - 1, 0);
+    else return;
+    e.preventDefault(); show();
+  });
+  fit(); show();
+</script>
+</body>
+</html>
