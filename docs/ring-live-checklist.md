@@ -1,49 +1,64 @@
-# Switching Describe My Door from the simulator to a real Ring account
+# Running Describe My Door against the real Ring API
 
-The hackathon rules ask to show the project working "through a simulator or an actual Ring device". Everything below is needed once, before re-recording the final video.
+The hackathon rules ask to show the project working "through a simulator or an actual Ring device". This is how to run the app against Ring's **Developer Playground** and what it can and cannot do, measured on 16 Sep 2026 with a live Playground token.
 
-## 1. Create the Ring developer account (the account owner does this)
+## 1. What the Playground actually gives you
 
-1. Go to <https://developer.amazon.com/ring/console> and sign in with an Amazon developer account.
-2. Complete identity verification (government photo ID; the company profile name must match the ID).
-3. Create an app. Note the **client ID**, **client secret** and **HMAC signing key** shown with the partner credentials.
-4. Set the **Webhook URL** to `https://<your-deployment>/api/ring/webhook`. For local testing use a tunnel, e.g. `cloudflared tunnel --url http://localhost:3024`, and register the tunnel URL. Ring requires public HTTPS and a 200 within 5 seconds (the route acknowledges immediately and runs the agent afterwards).
-5. If you want chime tones: request **Chime Controls** access for the app. Chime audio slots (`ring-appstore-event-1/2`) are provisioned outside the device API.
+With a Developer Playground token (console → Playground → *Generate token*, valid ~30 minutes):
 
-## 2. Get a token
+| Call | Result |
+| --- | --- |
+| `GET /v1/devices` | ✅ one device: **"Playground Device"**, a Doorbell Pro, `online: true` |
+| `GET /v1/devices/{id}/capabilities` | ✅ snapshot, privacy zones, colour night vision, 1080p AVC 16:9 |
+| `GET /v1/devices/{id}/status` | ✅ `online: true`, `reported_at` |
+| `GET /v1/devices/{id}/configurations` | ✅ motion zones, volume — but `audio.customizable_slots: null` |
+| `GET /v1/locations` | ✅ one location (US/CA) |
+| `GET /v1/history/devices/{id}/events` | ✅ `{"data": []}` — always empty |
+| `GET /v1/users/me` | ✅ synthetic "Playground User" |
+| `GET /v1/accounts/me/subscriptions` | ❌ 422 |
+| `POST /v1/devices/{id}/media/image/download` | ❌ 403 `TIME_RANGE_NOT_AUTHORIZED` with a timestamp (now or −120 s); 403 `REQUEST_FORBIDDEN … missing required timestamp fields` without one |
+| `POST /v1/devices/{id}/media/audio/playback` | ❌ 400 validation error (no chime on the account; the token's only scope is `ava.v1:read`) |
 
-- Quickest: open the **Developer Playground** (`developer.amazon.com/ring/console/playground`) and copy the access token (valid about 30 minutes).
-- Longer sessions: link a Ring account through the app's account-linking flow and store the refresh token.
+So the Playground is a **read-only device sandbox**: no recorded footage, no chime, no webhook delivery to a partner app.
 
-## 3. Configure environment variables
+## 2. Hybrid mode (what we ship)
 
-Local (`.env.local`) or Vercel (`vercel env add ... production`):
+`RING_MODE=hybrid` makes every call the sandbox supports real and clearly labels the rest:
 
+| Part of the demo | Source in hybrid |
+| --- | --- |
+| Device list, capabilities, status | **Ring Partner API** (badge: "Live Ring device", device name shown next to the simulator) |
+| Doorbell / motion event | Simulated (signed v1.1 webhook through the same verification path) |
+| Snapshot | Sample image, tagged `SAMPLE IMAGE`, with the Ring error as the tooltip |
+| Chime tone | Simulated, tagged "· simulated" next to the chime status |
+
+Without a token, or with an expired one, hybrid degrades to the full simulator and says so; nothing crashes.
+
+## 3. Run it
+
+```bash
+# 1. Console → Playground → Generate token, then:
+RING_MODE=hybrid
+RING_ACCESS_TOKEN=<paste the 30-minute token>
+RING_HMAC_KEY=<HMAC signature key from the app's credentials>   # signs simulated events too
+# optional, otherwise discovered from GET /v1/devices:
+RING_DOORBELL_ID=
+RING_CHIME_ID=
 ```
-RING_MODE=live
-RING_HMAC_KEY=<HMAC signing key>
-RING_ACCESS_TOKEN=<Playground token>        # or the next three
-# RING_REFRESH_TOKEN=...
-# RING_CLIENT_ID=...
-# RING_CLIENT_SECRET=...
-RING_DOORBELL_ID=<doorbell device id>        # from GET /v1/devices (shown at /api/ring/status)
-RING_CHIME_ID=<chime device id>              # optional
-APP_TZ=America/Los_Angeles
+
+```bash
+pnpm build && pnpm start -p 3024
+curl -s localhost:3024/api/ring/status | jq '{mode, sources, devices}'
 ```
 
-Do not set `RING_ACCESS_TOKEN` and `RING_REFRESH_TOKEN` together.
+Expect `"mode":"hybrid"`, `sources.devices: "ring"`, and the Playground device in `devices`. The header badge reads **"◐ Live Ring device · simulated events"**, and the simulator panel shows `● Ring API: Playground Device`.
 
-## 4. Verify
+## 4. Fully live (real Ring account with hardware)
 
-1. `curl https://<deployment>/api/ring/status` → `"mode":"live"`, your devices, and chime slots.
-2. Open the app: the header badge must read **● Live Ring API** and the simulator panel disappears.
-3. Trigger an event: press the doorbell, or use the Playground's simulated events. Watch the agent panel: `Ring webhook button_press ✓ HMAC-SHA256 verified`, then `fetch_snapshot` → `describe_scene` → `check_expected_visitors` → `announce`.
-4. If no webhook arrives: check the webhook URL, the tunnel, and whether the app is linked to the account that owns the device. The Ring forum reports staging motion events needing a subscription or trial on some accounts.
+`RING_MODE=live` sends everything to `api.amazonvision.com`. It needs a Ring account with a device and a Ring Protection plan, plus the app's webhook URL registered in the console's Configure step (`https://<deployment>/api/ring/webhook`, or a tunnel such as `cloudflared tunnel --url http://localhost:3024`). Ring requires a 200 within 5 s; the route acknowledges immediately and runs the agent in `after()`. Live webhook results reach the browser through an in-process bus, so run a single instance while recording.
 
-Known limit: live webhook results reach the browser through an in-process event bus (`lib/bus.ts`). Run a single server (local + tunnel, or one long-running instance) while recording.
+## 5. Re-recording the demo video
 
-## 5. Re-record the demo video
-
-1. `pnpm build && pnpm start -p 3024` with the live env vars.
-2. Update `hackathon-amazonappdev2026/narr4/lines.json` so it no longer says "simulated", regenerate TTS, and adapt `scripts/record-4.mjs`: replace the simulator clicks with waiting for a real `[data-testid=row-webhook]` while someone presses the doorbell (or while a Playground event is sent).
-3. Compose, check frames, upload publicly, and update the Devpost video URL.
+1. Paste a fresh token, start the production build in hybrid mode, and confirm the badge.
+2. Record with `scripts/record-4.mjs` (from `_hackathon/hackathon-amazonappdev2026`). The narration already says which half is live; if the wording changes, regenerate only the changed lines with `tts.py`.
+3. Compose, check frames, upload, and update the Devpost video URL.

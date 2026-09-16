@@ -37,6 +37,7 @@ export async function POST(req: Request) {
     deviceName: "Front Door",
     localTime,
     signature: (signature ?? "").slice(0, 19) + "…",
+    source: "ring",
   });
 
   after(async () => {

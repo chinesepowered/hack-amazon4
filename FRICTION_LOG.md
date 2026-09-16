@@ -54,7 +54,30 @@ Real issues we hit while building on the Ring Partner API and the Strands Agents
 - **Workaround:** Downloaded the HTML and searched it locally.
 - **Suggestion:** Publish an OpenAPI document and split the reference into per-endpoint pages. Both help AI coding assistants too.
 
-## 6. Strands TypeScript hooks aren't in the README
+## 6. The Developer Playground is a read-only device sandbox: no snapshots, no chime
+
+- **Task:** Run the app against real Ring infrastructure once we had a developer account, instead of our own simulator.
+- **Steps:** Console → Playground → *Generate token*, then called the documented endpoints with it (16 Sep 2026).
+- **Expected:** The Playground page advertises simulated Package / Vehicle / Motion events, so we expected at least a snapshot of a sandbox camera and, ideally, events delivered to our registered webhook URL.
+- **Actual:** Reads work: `GET /v1/devices` returns one Doorbell Pro ("Playground Device"), and `capabilities`, `status`, `configurations`, `locations` and `users/me` all respond. Media does not:
+  - `POST /v1/devices/{id}/media/image/download` → **403 `TIME_RANGE_NOT_AUTHORIZED`** for a current timestamp and for 2 minutes earlier; without a timestamp → **403 `REQUEST_FORBIDDEN`: "missing required timestamp fields in request body"**. There is no documented time range that the sandbox will authorize.
+  - `configurations` returns `audio.customizable_slots: null` and `POST /media/audio/playback` → 400. The token's only scope is `ava.v1:read`, so no write can succeed.
+  - `GET /v1/history/devices/{id}/events` is always `{"data": []}`, and the "Simulate live view event" buttons only start a WHEP session in the browser.
+- **Severity:** High (it decides whether a partner can build and demo anything without hardware).
+- **Workaround:** `RING_MODE=hybrid`: real device reads from the Ring API, simulated events, sample snapshot and simulated chime, each labeled in the UI so a reviewer can see exactly which half is live.
+- **Suggestion:** Give the Playground a few minutes of canned footage the image-download endpoint will serve, a virtual chime with two app slots, and an option to POST the simulated events to the app's webhook URL. Document the token's scope and the authorized time range in the Playground page.
+
+## 7. One sandbox device, so multi-camera flows can't be tried
+
+- **Task:** Test an app whose logic depends on two cameras (a door and a second camera that sees the person leaving).
+- **Steps:** `GET /v1/devices` with a Playground token.
+- **Expected:** A couple of devices of different kinds (doorbell, camera, chime), as the docs' multi-camera and chime sections imply.
+- **Actual:** Exactly one Doorbell Pro. No chime, no second camera, and no way to add one.
+- **Severity:** Medium.
+- **Workaround:** The second camera and the chime stay simulated and labeled.
+- **Suggestion:** Let a developer add virtual devices to the Playground account (doorbell, camera, chime, contact sensor) and fire events on any of them.
+
+## 8. Strands TypeScript hooks aren't in the README
 
 - **Task:** Enforce privacy and ordering rules deterministically before tool calls.
 - **Steps:** Read the `@strands-agents/sdk` README (v1.17), then the type definitions.

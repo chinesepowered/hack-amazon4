@@ -22,8 +22,10 @@ const Body = z.object({
 
 // Simulated Ring doorbell: builds the exact v1.1 webhook Ring would send, signs it with HMAC-SHA256,
 // then runs it through the same verification and agent pipeline as the live /api/ring/webhook route.
+// Available in simulator and hybrid mode: Ring's Developer Playground cannot deliver an event to a
+// partner webhook URL, so the trigger is always simulated (and labeled) unless a real device fires.
 export async function POST(req: Request) {
-  if (ringMode() !== "simulator") return Response.json({ error: "simulator disabled (RING_MODE=live)" }, { status: 409 });
+  if (ringMode() === "live") return Response.json({ error: "simulator disabled (RING_MODE=live)" }, { status: 409 });
   const limit = rateLimit(`sim:${clientIp(req)}`, 12);
   if (!limit.ok) return Response.json({ error: `Too many runs. Try again in ${limit.retryAfter}s.` }, { status: 429 });
 
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
         const w = intake.webhook;
         emit({
           kind: "webhook",
-          mode: "simulator",
+          mode: ringMode(),
           verified: true,
           requestId: w.meta.request_id,
           eventType: w.data.type,
@@ -62,6 +64,7 @@ export async function POST(req: Request) {
           deviceName: SIM_DEVICES[0].name,
           localTime: scenario.localTime,
           signature: signature.slice(0, 19) + "…",
+          source: "simulated",
         });
         await runDoorAgent({
           webhook: w,

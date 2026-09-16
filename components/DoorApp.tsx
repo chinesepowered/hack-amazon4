@@ -1,17 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DoorEvent } from "@/lib/events";
+import type { DoorEvent, Source } from "@/lib/events";
 import { SCENARIOS } from "@/lib/sim/scenarios";
 import { DEFAULT_EXPECTED, type ExpectedVisitor } from "@/lib/expected";
 
 type Announcement = Extract<DoorEvent, { kind: "announcement" }>;
 type Activity = Exclude<DoorEvent, { kind: "snapshot" } | { kind: "announcement" }> & { key: number };
+type Mode = "simulator" | "hybrid" | "live";
+type Status = { mode: Mode; devices?: { id: string; name: string; device_type: string }[]; sources?: Record<string, Source>; hasToken?: boolean };
 
 const CATEGORY_TEXT: Record<Announcement["category"], string> = {
   visitor: "Visitor",
   expected_visitor: "Expected visitor",
   package: "Package",
+};
+
+const MODE_BADGE: Record<Mode, { text: string; color: string; title: string }> = {
+  live: { text: "● Live Ring API", color: "var(--green)", title: "Every call goes to the Ring Partner API" },
+  hybrid: {
+    text: "◐ Live Ring device · simulated events",
+    color: "var(--blue)",
+    title: "Devices, capabilities and status come from the Ring API. Events, snapshots and the chime are simulated: the Developer Playground serves no recorded footage and has no chime.",
+  },
+  simulator: { text: "◆ Simulated Ring events", color: "var(--amber)", title: "Events and snapshots come from the built-in Ring simulator" },
 };
 
 const load = <T,>(k: string, fallback: T): T => {
@@ -29,10 +41,10 @@ const save = (k: string, v: unknown) => {
 };
 
 export default function DoorApp() {
-  const [mode, setMode] = useState<"simulator" | "live" | null>(null);
+  const [status, setStatus] = useState<Status | null>(null);
   const [running, setRunning] = useState(false);
   const [activity, setActivity] = useState<Activity[]>([]);
-  const [snapshot, setSnapshot] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<{ url: string; source: Source; note?: string } | null>(null);
   const [latest, setLatest] = useState<Announcement | null>(null);
   const [history, setHistory] = useState<Announcement[]>([]);
   const [expected, setExpected] = useState<ExpectedVisitor[]>(DEFAULT_EXPECTED);
@@ -42,6 +54,7 @@ export default function DoorApp() {
   const keyRef = useRef(0);
   const activityEnd = useRef<HTMLDivElement>(null);
   const latestRef = useRef<HTMLHeadingElement>(null);
+  const mode = status?.mode ?? null;
 
   useEffect(() => {
     setExpected(load("dmd.expected", DEFAULT_EXPECTED));
@@ -49,8 +62,8 @@ export default function DoorApp() {
     setSpeak(load("dmd.speak", true));
     fetch("/api/ring/status")
       .then((r) => r.json())
-      .then((j) => setMode(j.mode))
-      .catch(() => setMode("simulator"));
+      .then((j) => setStatus({ mode: j.mode, devices: j.devices, sources: j.sources, hasToken: j.hasToken }))
+      .catch(() => setStatus({ mode: "simulator" }));
   }, []);
 
   const say = useCallback(
@@ -68,7 +81,7 @@ export default function DoorApp() {
 
   const handle = useCallback(
     (e: DoorEvent) => {
-      if (e.kind === "snapshot") return setSnapshot(e.dataUrl);
+      if (e.kind === "snapshot") return setSnapshot({ url: e.dataUrl, source: e.source, note: e.note });
       if (e.kind === "announcement") {
         setLatest(e);
         setHistory((h) => {
@@ -177,6 +190,8 @@ export default function DoorApp() {
     packages: history.filter((h) => h.category === "package").length,
   };
 
+  const ringDevice = status?.sources?.devices === "ring" ? status.devices?.[0] : undefined;
+
   return (
     <div style={{ minHeight: "100vh", padding: "18px 22px 20px" }}>
       <a className="skip" href="#latest">
@@ -204,16 +219,17 @@ export default function DoorApp() {
           />
           Speak aloud
         </label>
-        {mode && (
-          <span
-            className="chip"
-            data-testid="mode"
-            style={{ color: mode === "live" ? "var(--green)" : "var(--amber)", fontSize: 14, padding: "6px 14px" }}
-            title={mode === "live" ? "Connected to the Ring Partner API" : "Events and snapshots come from the built-in Ring simulator"}
-          >
-            {mode === "live" ? "● Live Ring API" : "◆ Simulated Ring events"}
-          </span>
-        )}
+        {mode &&
+          (() => {
+            // Hybrid only earns the "live device" badge when the Ring API actually answered.
+            const badge = mode === "hybrid" && status?.sources?.devices !== "ring" ? MODE_BADGE.simulator : MODE_BADGE[mode];
+            return (
+              <span className="chip" data-testid="mode" style={{ color: badge.color, fontSize: 14, padding: "6px 14px" }} title={badge.title}>
+                {badge.text}
+                {mode === "hybrid" && status?.sources?.devices === "ring" && ringDevice ? ` · ${ringDevice.name}` : ""}
+              </span>
+            );
+          })()}
       </header>
 
       <main style={{ display: "grid", gridTemplateColumns: "minmax(0,1.25fr) minmax(0,1fr) minmax(0,0.95fr)", gap: 16, height: "calc(100vh - 110px)", minHeight: 700 }}>
@@ -238,6 +254,12 @@ export default function DoorApp() {
               {latest && (
                 <span style={{ color: "var(--muted)", fontSize: 15 }} data-testid="chime-status">
                   Hallway Chime: {latest.chime.audioName || latest.chime.slot} · <b style={{ color: latest.chime.status === "completed" ? "var(--green)" : "var(--red)" }}>{latest.chime.status}</b>
+                  {latest.chime.source === "simulated" && (
+                    <span title={latest.chime.note ?? "Chime playback simulated"} style={{ color: "var(--amber)" }}>
+                      {" "}
+                      · simulated
+                    </span>
+                  )}
                 </span>
               )}
             </div>
@@ -279,21 +301,36 @@ export default function DoorApp() {
           <div className="panel" style={{ overflow: "hidden", position: "relative", aspectRatio: "16 / 10", flex: "none" }} data-testid="camera">
             {snapshot ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={snapshot} alt={latest?.text ?? "Doorbell camera snapshot"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} className="rise" />
+              <img src={snapshot.url} alt={latest?.text ?? "Doorbell camera snapshot"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} className="rise" />
             ) : (
               <div style={{ height: "100%", display: "grid", placeItems: "center", color: "var(--muted)", fontSize: 16 }}>{running ? "Downloading snapshot…" : "Front Door camera"}</div>
             )}
-            <span className="mono" style={{ position: "absolute", left: 12, top: 10, fontSize: 12, background: "rgba(0,0,0,.65)", padding: "3px 8px", borderRadius: 6 }}>
-              FRONT DOOR{mode === "simulator" ? " · SIMULATED SNAPSHOT" : ""}
+            <span
+              className="mono"
+              data-testid="camera-source"
+              title={snapshot?.note ?? undefined}
+              style={{ position: "absolute", left: 12, top: 10, fontSize: 12, background: "rgba(0,0,0,.65)", padding: "3px 8px", borderRadius: 6 }}
+            >
+              FRONT DOOR{snapshot ? (snapshot.source === "ring" ? " · RING SNAPSHOT" : " · SAMPLE IMAGE") : ""}
             </span>
           </div>
 
           {mode !== "live" && (
             <div className="panel" style={{ padding: "14px 16px" }} data-testid="simulator">
-              <h3 className="label" style={{ margin: "0 0 4px" }}>
-                Ring simulator
-              </h3>
-              <p style={{ margin: "0 0 10px", fontSize: 14, color: "var(--muted)" }}>Sends a signed Ring webhook v1.1 event to the agent.</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                <h3 className="label" style={{ margin: "0 0 4px" }}>
+                  Ring simulator
+                </h3>
+                {ringDevice && (
+                  <span className="mono" data-testid="ring-device" style={{ fontSize: 11, color: "var(--green)" }} title={`Live from GET /v1/devices · ${ringDevice.id}`}>
+                    ● Ring API: {ringDevice.name}
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: "0 0 10px", fontSize: 14, color: "var(--muted)" }}>
+                Sends a signed Ring webhook v1.1 event to the agent.
+                {mode === "hybrid" ? " Ring can't deliver Playground events to an app, so the trigger is simulated." : ""}
+              </p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {SCENARIOS.map((s) => (
                   <button key={s.id} className="btn" onClick={() => trigger(s.id)} disabled={running} data-testid={`sim-${s.id}`} style={{ fontSize: 14, padding: "8px 10px", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
@@ -341,6 +378,15 @@ export default function DoorApp() {
   );
 }
 
+function SourceTag({ source }: { source?: Source }) {
+  if (!source) return null;
+  return (
+    <span className="mono" style={{ fontSize: 11, color: source === "ring" ? "var(--green)" : "var(--amber)", marginLeft: 6 }}>
+      {source === "ring" ? "Ring API" : "simulated"}
+    </span>
+  );
+}
+
 function ActivityRow({ a }: { a: Activity }) {
   const base: React.CSSProperties = { borderRadius: 10, padding: "7px 10px", fontSize: 13, lineHeight: 1.35, background: "var(--panel-2)", border: "1px solid var(--line)" };
   if (a.kind === "webhook")
@@ -348,6 +394,7 @@ function ActivityRow({ a }: { a: Activity }) {
       <div className="rise" style={{ ...base, borderColor: "var(--amber)" }} data-testid="row-webhook">
         <div style={{ fontWeight: 700, fontSize: 14 }}>
           Ring webhook <span className="mono">{a.eventType}{a.subType ? `:${a.subType}` : ""}</span>
+          <SourceTag source={a.source} />
         </div>
         <div className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>
           {a.deviceName} · {a.localTime} · X-Signature {a.signature}
@@ -363,6 +410,7 @@ function ActivityRow({ a }: { a: Activity }) {
           <span className="mono" style={{ fontWeight: 600 }}>
             {a.name}()
           </span>
+          <SourceTag source={a.source} />
         </div>
         {a.detail && <div style={{ color: "var(--muted)", marginLeft: 22 }}>{a.detail}</div>}
       </div>

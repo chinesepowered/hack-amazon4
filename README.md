@@ -2,7 +2,7 @@
 
 **Hear who is at your Ring doorbell.** Describe My Door is a Ring app for blind and low-vision residents. When someone rings the doorbell or leaves a package, a **Strands agent** downloads the Ring snapshot, describes the scene in one or two plain sentences ("This may be Lunch delivery from Nonna's Kitchen: a person in a green and black jacket holding a brown box"), checks it against the visitors a caregiver said to expect, and speaks it on the resident's phone while the Ring Chime sounds a matching tone. It never guesses who someone is.
 
-**Live demo:** https://describe-my-door.vercel.app (no login; it runs on the built-in Ring simulator) · **Pitch deck:** https://describe-my-door.vercel.app/slides.html · **Video:** _link added at submission_
+**Live demo:** https://describe-my-door.vercel.app (no login) · **Pitch deck:** https://describe-my-door.vercel.app/slides.html · **Video:** _link added at submission_
 
 Built new for the Amazon *Build, Ship, Shape* hackathon (submission window from Aug 31, 2026) · Ring track · AWS Builder mini-challenge (Strands Agents SDK).
 
@@ -27,6 +27,26 @@ A video doorbell is a screen. For someone who can't see the screen, "who's at th
 
 What the human still decides: whether to open the door.
 
+## What is real Ring, and what is simulated
+
+The app has three modes (`RING_MODE`), and the UI labels every element so nothing over-claims.
+
+| | `simulator` (public demo) | `hybrid` (with a Playground token) | `live` (real account + hardware) |
+| --- | --- | --- | --- |
+| Devices, capabilities, status | simulated | **Ring Partner API** | Ring |
+| Doorbell / motion event | simulated, signed v1.1 webhook | simulated, signed v1.1 webhook | Ring webhook |
+| Snapshot | sample image | sample image (Ring returns 403, see below) | Ring image download |
+| Chime tone | simulated | simulated | Ring audio playback |
+
+We hold a Ring developer account with two private apps, and measured the **Developer Playground** on 16 Sep 2026 with a live token (scope `ava.v1:read`):
+
+- `GET /v1/devices` returns exactly one device, a Doorbell Pro called "Playground Device"; `capabilities`, `status`, `configurations`, `locations` and `users/me` all work.
+- `POST /media/image/download` answers **403 `TIME_RANGE_NOT_AUTHORIZED`** for every timestamp we tried (and `REQUEST_FORBIDDEN` without one), so the sandbox serves no footage.
+- `configurations.audio.customizable_slots` is `null` and audio playback returns 400: there is no chime, and a read-only token cannot write.
+- `GET /v1/history/devices/{id}/events` is always empty, and the Playground's Package / Vehicle / Motion buttons only open a WHEP live-view session in the browser; they are not delivered to a partner webhook.
+
+That is why hybrid mode exists: the reads that Ring really serves are live, and the parts the sandbox cannot do stay simulated **and labeled** (`SAMPLE IMAGE` on the camera, "· simulated" next to the chime status, "simulated" on the webhook row). Details and suggestions are in [`FRICTION_LOG.md`](FRICTION_LOG.md) #6 and #7; switching modes is in [`docs/ring-live-checklist.md`](docs/ring-live-checklist.md).
+
 ## How we use Amazon's technology
 
 ### Ring Partner API (Ring track)
@@ -35,14 +55,12 @@ What the human still decides: whether to open the door.
 | --- | --- | --- |
 | Doorbell and motion events | Webhook v1.1 envelope, `X-Signature: sha256=<hex>` HMAC-SHA256 of the raw body, idempotency on `meta.request_id`, 200 within 5 s (agent runs after the response) | `app/api/ring/webhook/route.ts`, `lib/ring/webhook.ts`, `lib/intake.ts` |
 | Motion classification | `data.attributes.sub_type` (`human`, `vehicle`, …) | `lib/ring/webhook.ts`, `lib/agent/door-agent.ts` |
+| Devices, capabilities, status | `GET /v1/devices`, `/capabilities`, `/status` (live in hybrid mode, shown in the UI) | `lib/ring/client.ts`, `app/api/ring/status/route.ts` |
 | Snapshot at the event | `POST /v1/devices/{id}/media/image/download` with `type: at_timestamp`, following the 303 redirect | `lib/ring/client.ts` |
 | Chime tone | `GET /v1/devices/{id}/configurations` → `audio.customizable_slots`, then `POST /v1/devices/{id}/media/audio/playback` with `{"data":{"type":"audio","attributes":{"audio_ref":…}}}` | `lib/ring/client.ts` |
-| Devices | `GET /v1/devices` | `lib/ring/client.ts`, `app/api/ring/status/route.ts` |
 | Auth | Playground access token or OAuth refresh token (`https://oauth.ring.com/oauth/token`) | `lib/ring/client.ts` |
 
-**Simulator mode.** No Ring developer account or device is needed to try the app. `RING_MODE=simulator` (the default) swaps in a Ring-API-compatible client that serves snapshot fixtures and chime slots. `app/api/sim/doorbell/route.ts` builds the same v1.1 envelope Ring sends, signs it with HMAC-SHA256, and pushes it through the same verification code as the live route. The UI badge reads **"Simulated Ring events"**. Switching to a real account is one env var; see [`docs/ring-live-checklist.md`](docs/ring-live-checklist.md).
-
-Design notes that came from the Ring docs:
+Design notes that came from the Ring docs and from testing:
 - Chime playback accepts only an `audio_ref` already in one of the app's slots, not generated speech. So the chime plays a category tone and the full description is spoken on the companion app (see [`FRICTION_LOG.md`](FRICTION_LOG.md) #1).
 - Motion `sub_type` has no package class, so packages are counted from the snapshot instead.
 - Ring API calls are server-to-server only, as the docs require.
@@ -82,13 +100,13 @@ Open http://localhost:3024 and press a button in **Ring simulator**:
 
 Keyboard: **R** repeats the last announcement. The "Speak aloud" toggle controls speech.
 
-Live Ring mode: follow [`docs/ring-live-checklist.md`](docs/ring-live-checklist.md).
+For real Ring device reads, set `RING_MODE=hybrid` and paste a Developer Playground token into `RING_ACCESS_TOKEN`; see [`docs/ring-live-checklist.md`](docs/ring-live-checklist.md).
 
 ## Limitations
 
 - Rate limits and live-mode event fan-out are in-memory (`lib/ratelimit.ts`, `lib/bus.ts`). Live webhooks should run on a single server instance, or swap the bus for a queue.
 - Descriptions come from a general vision model and can be wrong. The app says "may be" for expected visitors and never claims identity.
-- The public demo uses the simulator; the live Ring path follows the documented API but was built before the Ring developer account existed.
+- The public demo has no Ring token, so it runs the simulator. With a token it runs hybrid; a fully live run needs a Ring account with hardware and a Ring Protection plan.
 
 ## Data, credits and AI assistance
 

@@ -1,7 +1,7 @@
 import { Agent, tool, BeforeToolCallEvent, BeforeModelCallEvent } from "@strands-agents/sdk";
 import { OpenAIModel } from "@strands-agents/sdk/models/openai";
 import { z } from "zod";
-import { getRingClient, chimeId, type Snapshot } from "@/lib/ring/client";
+import { getRingClient, chimeId, resolveDoorbellId, type Snapshot } from "@/lib/ring/client";
 import { observeImage, type Observation } from "@/lib/vision";
 import { sanitizeObservation, checkText, wordCount, MAX_WORDS } from "@/lib/privacy";
 import { matchExpected, type ExpectedVisitor, type MatchResult } from "@/lib/expected";
@@ -38,7 +38,9 @@ export async function runDoorAgent(opts: RunOptions) {
   const ring = getRingClient();
   const started = Date.now();
   const eventType = webhook.data.type;
-  const deviceId = webhook.data.attributes.source;
+  // In hybrid mode ask the Ring API for the snapshot of the account's real camera; the webhook's
+  // device id belongs to the simulated event. The client falls back to a sample image and says why.
+  const snapshotDeviceId = ring.mode === "simulator" ? webhook.data.attributes.source : await resolveDoorbellId();
 
   // Per-invocation facts. Tools write them; hooks read them to enforce the rules.
   const facts: {
@@ -58,11 +60,18 @@ export async function runDoorAgent(opts: RunOptions) {
     description: "Download the doorbell camera image at the moment of the Ring event (Ring image download API).",
     inputSchema: z.object({}),
     callback: async () => {
-      emit({ kind: "tool", id: "fetch_snapshot", name: "fetch_snapshot", status: "running", detail: `POST /v1/devices/${deviceId}/media/image/download` });
-      const snap = await ring.downloadSnapshot(deviceId, webhook.data.attributes.timestamp, scenarioHint);
+      emit({ kind: "tool", id: "fetch_snapshot", name: "fetch_snapshot", status: "running", detail: `POST /v1/devices/${snapshotDeviceId}/media/image/download` });
+      const snap = await ring.downloadSnapshot(snapshotDeviceId, webhook.data.attributes.timestamp, scenarioHint);
       facts.snapshot = snap;
-      emit({ kind: "snapshot", dataUrl: `data:${snap.mime};base64,${snap.bytes.toString("base64")}` });
-      emit({ kind: "tool", id: "fetch_snapshot", name: "fetch_snapshot", status: "done", detail: `${Math.round(snap.bytes.length / 1024)} KB ${snap.mime}` });
+      emit({ kind: "snapshot", dataUrl: `data:${snap.mime};base64,${snap.bytes.toString("base64")}`, source: snap.source, note: snap.note });
+      emit({
+        kind: "tool",
+        id: "fetch_snapshot",
+        name: "fetch_snapshot",
+        status: "done",
+        detail: `${Math.round(snap.bytes.length / 1024)} KB ${snap.mime}${snap.note ? ` · ${snap.note}` : ""}`,
+        source: snap.source,
+      });
       return { ok: true, size_kb: Math.round(snap.bytes.length / 1024) };
     },
   });
@@ -118,7 +127,14 @@ export async function runDoorAgent(opts: RunOptions) {
       const slots = await ring.chimeSlots(chimeId());
       const slot = slots.find((s) => s.event === (category === "package" ? "ring-appstore-event-2" : "ring-appstore-event-1")) ?? slots[0];
       let chimeStatus = "no chime slot";
-      if (slot && !slot.disabled) chimeStatus = (await ring.playChime(chimeId(), slot.audio_ref)).status;
+      let chimeSource: "ring" | "simulated" = "simulated";
+      let chimeNote: string | undefined;
+      if (slot && !slot.disabled) {
+        const played = await ring.playChime(chimeId(), slot.audio_ref);
+        chimeStatus = played.status;
+        chimeSource = played.source;
+        chimeNote = played.note;
+      }
       facts.announced = true;
       emit({
         kind: "announcement",
@@ -126,10 +142,10 @@ export async function runDoorAgent(opts: RunOptions) {
         text: message.trim(),
         category: category as Category,
         localTime,
-        chime: { slot: slot?.event ?? "none", audioName: slot?.audio_name ?? "", status: chimeStatus },
+        chime: { slot: slot?.event ?? "none", audioName: slot?.audio_name ?? "", status: chimeStatus, source: chimeSource, note: chimeNote },
         match: facts.match?.matched ? { label: facts.match.visitor!.label, window: facts.match.visitor!.window, clues: facts.match.cluesFound } : undefined,
       });
-      emit({ kind: "tool", id: "announce", name: "announce", status: "done", detail: `chime ${chimeStatus}` });
+      emit({ kind: "tool", id: "announce", name: "announce", status: "done", detail: `chime ${chimeStatus}`, source: chimeSource });
       return { spoken: true, chime: chimeStatus };
     },
   });
